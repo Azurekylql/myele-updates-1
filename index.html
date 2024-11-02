@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 在渲染进程中要设置合适的CSP 'unsafe-inline'：允许内联脚本 'unsafe-eval'：允许使用 eval() 函数 -->
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <title>Document</title>
+    <link rel="stylesheet" href="./node_modules/simplemde/dist/simplemde.min.css">
+    </link>
+    <script src=" ./node_modules/simplemde/dist/simplemde.min.js">
+    </script>
+</head>
+
+<body ondrop="dropHandler(event)">
+    <h1>Editor</h1>
+    <textarea id="editor"></textarea>
+    <script>
+
+        const editor = new SimpleMDE({
+            element: document.getElementById("editor")
+        });
+
+        const { ipcRenderer } = require('electron');
+
+        // 当渲染进程接收到主进程的'editor-event'消息之后，调用加粗API
+        ipcRenderer.on('editor-event', (event, arg) => {
+            console.log(arg);
+            // 将消息传回主进程
+            event.sender.send('editor-reply', `Received ${arg}`);
+            if (arg === 'toggle-bold') {
+                editor.toggleBold();
+            }
+            if (arg === 'toggle-italic') {
+                editor.toggleItalic();
+            }
+            if (arg === 'toggle-strikethrough') {
+                editor.toggleStrikethrough();
+            }
+            // 当渲染进程接收到save的指令之后，会将当前编辑器的值发送回sender
+            if (arg === 'save') {
+                event.sender.send('save', editor.value());
+            }
+        });
+
+        ipcRenderer.on('load', (event, content) => {
+            console.log('load');
+            if (content) {
+                console.log(`接收到load加载的信息：${content}`);
+                editor.value(content);
+            }
+        });
+
+        // 拖拽事件
+        function dropHandler(event) {
+
+            event.preventDefault(); // 阻止默认行为
+
+            console.log("event.dataTransfer.items", event.dataTransfer.items[0].kind);
+            if (event.dataTransfer.items) {
+                if (event.dataTransfer.items[0].kind === 'file') {
+                    let file = event.dataTransfer.items[0].getAsFile();
+                    // 使用getAsFile获取文件详细
+                    console.log('file', file);
+                    // 有问题，就是很多的md文件的type是空字符串
+                    const regex = /.md$/;
+                    // if (file.type === 'text/markdown') {
+                    if (regex.test(file.name)) {
+
+                        let reader = new FileReader();
+
+                        // onload事件，当文本读取完成的时候触发
+                        reader.onload = function (e) {
+                            // console.log(e.target.result);
+                            // 使用 editor.codemirror.setValue(e.target.result) 时，你可以确保所有 CodeMirror 的特性（如语法高亮、行号等）都能正确地应用于设置的内容。
+                            editor.codemirror.setValue(e.target.result)
+                            // editor.value(e.target.result)
+                        };
+
+                        // 异步读取文件内容并将其作为文本字符串返回,读取完成之后就会触发onload事件
+                        reader.readAsText(file);
+                    }
+                }
+            }
+        }
+
+    </script>
+</body>
+
+<style>
+    html,
+    body {
+        height: 100%;
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+    }
+
+    .CodeMirror {
+        flex: 1;
+    }
+</style>
+
+</html>
